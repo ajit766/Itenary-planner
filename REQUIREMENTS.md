@@ -1,7 +1,7 @@
 # Trip Planner MVP — Conversation-First Requirements
 
 ## 1) Scope and Persona
-- Persona: Indian couple + 2-year-old child, international travel to Thailand (initial focus)
+- Persona: Indian couple + 2-year-old child, international travel for vacation (initial focus)
 - Trip length: 5–7 days (user-provided)
 - Destination: Provided by user as an input; places to visit are discovered collaboratively during the conversation
 - Budget mindset: Frugal / Moderate / Premium (value-focused defaults)
