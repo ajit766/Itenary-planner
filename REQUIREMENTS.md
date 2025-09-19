@@ -66,7 +66,7 @@ Goal: The AI conducts a guided conversation, educates with context, gathers cons
 ## 4) Non-Functional Requirements
 - Performance: 3–6s typical responses when cached; 6–12s when aggregating providers.
 - Reliability: clear fallbacks and confidence labels when providers or quotas fail.
-- Observability: log OpenAI prompts/responses and provider calls (redact PII).
+- Observability: log Gemini prompts/responses and provider calls (redact PII); leverage Vertex AI/ADK tracing.
 - Accessibility: keyboard, contrast, large tap targets.
 - Privacy: store minimal PII, secure keys, comply with providers' ToS.
 
@@ -74,7 +74,7 @@ Goal: The AI conducts a guided conversation, educates with context, gathers cons
 - EaseMyTrip: hotels and flights (search, pricing, availability, deep links/booking flow)
 - Google Maps Platform: Places, Details, Directions, Geocoding
 - OpenWeatherMap: daily/hourly forecasts for scheduling
-- OpenAI API: reasoning and itinerary composition with validated JSON outputs
+- Google Gemini (Vertex AI) via Google AI Developer Kit (ADK): reasoning and itinerary composition with validated JSON outputs
 
 ## 6) Acceptance Criteria (MVP)
 - Destination is collected as an explicit input.

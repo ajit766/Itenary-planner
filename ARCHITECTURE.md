@@ -9,20 +9,21 @@ Conversation-first web app where the AI interviews the traveler, educates them a
   - Live Trip Summary sidebar (destination, days, budget, vibe, cities chosen)
   - Read-only Share/Print view
 
-- Backend (Next.js API routes or Node service)
-  - Conversation endpoint orchestrating LLM + tools
-  - Provider endpoints: EMT, Maps/Places/Directions, Weather
+- Backend (Google Cloud Run or GKE; Node/TypeScript service)
+  - Conversation endpoint orchestrating Gemini via ADK and calling tools
+  - Provider endpoints: EMT, Google Maps/Places/Directions, Weather (OpenWeatherMap)
   - Itinerary generation and editing endpoints
 
-- Database (Supabase Postgres + Auth)
+- Database (Cloud SQL for PostgreSQL) and Auth (Firebase Auth)
   - Owns users, conversations, trips, itineraries, POIs cache, shortlists, logs
+  - Firebase Auth tokens validate on backend; optional Cloud Run IAM auth for service-to-service
 
-- AI Layer (OpenAI)
-  - Tool calling functions with strict JSON schemas
-  - Prompt templates emphasizing toddler-friendly constraints
-  - Output validation and auto-retry on schema errors
+- AI Layer (Gemini on Vertex AI via Google AI Developer Kit - ADK)
+  - Agent graph/state machine with strict JSON schemas for tool-calling
+  - System prompts and policies emphasizing toddler-friendly constraints
+  - Output validation and auto-retry on schema errors using ADK structured output
 
-## 3) Data Model (Supabase)
+## 3) Data Model (Cloud SQL for PostgreSQL)
 - users(id, email, created_at)
 - profiles(user_id, home_airport, preferences_json)
 - conversations(id, user_id, status, created_at)
@@ -38,7 +39,7 @@ Conversation-first web app where the AI interviews the traveler, educates them a
 - share_tokens(id, trip_id, token, expires_at)
 - ai_logs(id, trip_id, prompt, response, model, latency_ms, tool_results_metadata)
 
-## 4) Conversation Orchestrator
+## 4) Conversation Orchestrator (ADK Agent Graph)
 - State machine with slots:
   - destination_input, origin_city, dates, total_days, travelers, toddler_presence, budget_mindset, pace_style, nap_windows, accessibility, dietary
   - selected_cities, activities_selected, hotel_prefs, flight_prefs
@@ -78,7 +79,7 @@ Conversation-first web app where the AI interviews the traveler, educates them a
 ### 5.4 OpenWeatherMap
 - Daily/hourly forecasts to pick indoor/outdoor and backups
 
-## 6) AI Tool Schemas
+## 6) AI Tool Schemas (ADK Tools)
 - search_destinations({ destination_input, month, trip_days, budget_mindset, pace_style })
 - propose_city_split({ candidate_cities, trip_days, toddler_profile })
 - find_pois({ city_code, tags, max_results })
@@ -101,14 +102,15 @@ All return strict JSON; Zod validates responses; auto-retry on failure.
 - Fallbacks: serve last good snapshot with timestamp and confidence if a provider fails
 
 ## 9) Security and Privacy
-- Supabase Auth; Row Level Security for user-owned data
-- Secrets on server-only; never exposed to client
+- Firebase Auth for client auth; backend verifies ID tokens
+- Secrets managed via Secret Manager; never exposed to client
 - Log prompts/tool outputs with PII redaction
 
 ## 10) Deployment and Observability
-- ENV management for API keys
-- Basic telemetry: request latency, tool call counts, LLM token usage
-- Error tracking and alerting on provider failures
+- Deploy backend on Cloud Run (containerized Node/TypeScript)
+- ENV and secrets via Secret Manager + Cloud Run variables
+- Observability: Cloud Logging, Cloud Trace; Vertex AI/ADK traces for agent/tool steps
+- Metrics: request latency, tool call counts, tokens; Error Reporting alerts on provider failures
 
 ## 11) Acceptance Tests (Architecture)
 - Conversation collects destination input and discovers places interactively
