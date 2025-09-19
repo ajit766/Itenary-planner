@@ -19,8 +19,8 @@ Sequential Workflow Agent
 **Purpose:** Collect fundamental trip information from user
 
 **Responsibilities:**
-- Ask for origin city/airport
 - Collect destination country/city (user input)
+- Ask for origin city/airport
 - Gather travel dates and total days
 - Get traveler details (count, ages, including toddler info)
 - Determine budget mindset (Frugal/Moderate/Premium)
