@@ -4,7 +4,7 @@ This repo contains a conversation-first itinerary planning prototype. The AI age
 
 ### 1) Prerequisites
 - Python 3.13 (recommended to match the repo's `venv`)
-- git
+- git 
 - A Google Gemini API key or access to Vertex AI
   - Option A: Gemini API key (`GOOGLE_API_KEY`)
   - Option B: Vertex AI with Application Default Credentials (`gcloud auth application-default login`)
