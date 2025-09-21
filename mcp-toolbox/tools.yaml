@@ -1,0 +1,211 @@
+sources:
+  my-cloud-sql-source:
+    kind: cloud-sql-postgres
+    project: itenary-agents
+    region: us-central1
+    instance: itenarydb-instance
+    database: postgres
+    user: postgres
+    password: postgres
+
+tools:
+  # Step 2: Destination Education - Get cities for a country
+  sql_get_cities:
+    kind: postgres-sql
+    source: my-cloud-sql-source
+    description: Get cities for a destination country with details and recommendations for trip planning
+    parameters:
+      - name: country
+        type: string
+        description: The country name to get cities for
+    statement: |
+      SELECT id, name, country, description, vibe, pros, cons, best_for, ideal_days, family_friendly
+      FROM cities
+      WHERE LOWER(country) = LOWER($1)
+      ORDER BY name;
+
+  # Step 4: Activity Discovery - Get kid-friendly activities for a city
+  get-activities:
+    kind: postgres-sql
+    source: my-cloud-sql-source
+    description: Get kid-friendly activities for a specific city with tags and recommendations
+    parameters:
+      - name: city_name
+        type: string
+        description: The city name to get activities for
+      - name: tag_filter
+        type: string
+        required: false
+        description: Filter by activity tag like 'toddler-friendly', 'stroller-friendly' (optional)
+    statement: |
+      SELECT a.id, a.name, a.description, a.category, a.tags, a.duration_hours,
+             a.cost_usd, a.why_recommended, a.weather_dependent, c.name as city_name
+      FROM activities a
+      JOIN cities c ON a.city_id = c.id
+      WHERE LOWER(c.name) = LOWER($1)
+        AND (
+             $2 IS NULL
+             OR NULLIF($2, '') IS NULL
+             OR LOWER($2) = ANY(ARRAY(SELECT LOWER(x) FROM unnest(a.tags) AS x))
+        )
+      ORDER BY a.name;
+
+  search-hotels:
+    kind: postgres-sql
+    source: my-cloud-sql-source
+    description: Search hotels in a city with family-friendly features and location preferences
+    parameters:
+      - name: city_name
+        type: string
+        description: The city name to search hotels in
+      - name: location_type
+        type: string
+        required: false
+        description: Preferred location type - 'central', 'airport', 'beach', 'residential' (optional)
+      - name: max_price
+        type: float
+        required: false
+        description: Maximum price per night in USD (optional)
+    statement: |
+      SELECT h.id, h.name, h.address, h.location_type, h.rating, h.price_usd_per_night,
+             h.amenities, h.family_features, h.why_recommended, c.name as city_name
+      FROM hotels h
+      JOIN cities c ON h.city_id = c.id
+      WHERE LOWER(c.name) = LOWER($1)
+        AND ($2 IS NULL OR LOWER(h.location_type) = LOWER($2))
+        AND ($3 IS NULL OR h.price_usd_per_night <= $3)
+      ORDER BY h.rating DESC, h.price_usd_per_night;
+
+  search-flights:
+    kind: postgres-sql
+    source: my-cloud-sql-source
+    description: Search flights between cities with pricing and duration options
+    parameters:
+      - name: origin
+        type: string
+        description: Origin city name
+      - name: destination
+        type: string
+        description: Destination city name
+      - name: departure_date
+        type: string
+        description: Departure date in YYYY-MM-DD format
+      - name: max_stops
+        type: integer
+        required: false
+        description: Maximum number of stops (optional)
+    statement: |
+      SELECT id, origin_city, destination_city, origin_code, destination_code,
+             departure_time, arrival_time, duration_minutes, stops, airline,
+             price_usd, available_seats, baggage_included, why_recommended
+      FROM flights
+      WHERE LOWER(origin_city) = LOWER($1)
+        AND LOWER(destination_city) = LOWER($2)
+        AND DATE(departure_time) = $3::date
+        AND ($4 IS NULL OR stops <= $4)
+      ORDER BY price_usd, duration_minutes;
+
+  get-weather-forecast:
+    kind: postgres-sql
+    source: my-cloud-sql-source
+    description: Get weather forecast for a city on specific dates for itinerary planning
+    parameters:
+      - name: city_name
+        type: string
+        description: The city name to get weather for
+      - name: start_date
+        type: string
+        description: Start date for forecast in YYYY-MM-DD format
+      - name: end_date
+        type: string
+        required: false
+        description: End date for forecast in YYYY-MM-DD format (optional)
+    statement: |
+      SELECT w.forecast_date, w.temperature_high, w.temperature_low, w.condition,
+             w.precipitation_chance, w.wind_speed, w.recommendations, c.name as city_name
+      FROM weather_forecasts w
+      JOIN cities c ON w.city_id = c.id
+      WHERE LOWER(c.name) = LOWER($1)
+        AND w.forecast_date >= $2::date
+        AND ($3 IS NULL OR w.forecast_date <= $3::date)
+      ORDER BY w.forecast_date;
+
+  get-city-info:
+    kind: postgres-sql
+    source: my-cloud-sql-source
+    description: Get detailed information about a specific city
+    parameters:
+      - name: city_name
+        type: string
+        description: The city name to get information for
+    statement: |
+      SELECT id, name, country, description, vibe, pros, cons, best_for, ideal_days, family_friendly
+      FROM cities
+      WHERE LOWER(name) = LOWER($1);
+
+  get-hotels-by-price-range:
+    kind: postgres-sql
+    source: my-cloud-sql-source
+    description: Get hotels in a city within a specific price range, sorted by rating
+    parameters:
+      - name: city_name
+        type: string
+        description: The city name to search hotels in
+      - name: min_price
+        type: float
+        description: Minimum price per night in USD
+      - name: max_price
+        type: float
+        description: Maximum price per night in USD
+    statement: |
+      SELECT h.id, h.name, h.address, h.location_type, h.rating, h.price_usd_per_night,
+             h.amenities, h.family_features, h.why_recommended, c.name as city_name
+      FROM hotels h
+      JOIN cities c ON h.city_id = c.id
+      WHERE LOWER(c.name) = LOWER($1)
+        AND h.price_usd_per_night >= $2
+        AND h.price_usd_per_night <= $3
+      ORDER BY h.rating DESC, h.price_usd_per_night;
+
+  search-hotels-by-name:
+    kind: postgres-sql
+    source: my-cloud-sql-source
+    description: Search for hotels based on (partial) hotel name
+    parameters:
+      - name: name
+        type: string
+        description: Partial or full hotel name to search for
+    statement: |
+      SELECT *
+      FROM hotels
+      WHERE name ILIKE '%' || $1 || '%';
+
+  search-hotels-by-location:
+    kind: postgres-sql
+    source: my-cloud-sql-source
+    description: Search for hotels by location type (e.g., 'central', 'airport', 'beach', 'residential'), sorted by price ascending
+    parameters:
+      - name: location_type
+        type: string
+        description: Location type to match (partial match supported)
+    statement: |
+      SELECT *
+      FROM hotels
+      WHERE LOWER(location_type) LIKE '%' || LOWER($1) || '%'
+      ORDER BY price_usd_per_night ASC;
+
+toolsets:
+  trip-planner-tools:
+    - sql_get_cities
+    - get-activities
+    - search-hotels
+    - search-flights
+    - get-weather-forecast
+    - get-city-info
+    - get-hotels-by-price-range
+    - search-hotels-by-name
+    - search-hotels-by-location
+
+  my_first_toolset:
+    - search-hotels-by-name
+    - search-hotels-by-location

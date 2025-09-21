@@ -1,7 +1,97 @@
+from typing import Any, Callable, Dict, List, Optional
+import os
+import atexit
+from contextlib import suppress
+
 from google.adk.agents import LlmAgent
 from google.adk.tools import agent_tool
 from .custom_agents import google_search_agent
 
+# ──────────────────────────────────────────────────────────────────────────────
+# MCP (Toolbox) client — used ONLY for hotel search
+# ──────────────────────────────────────────────────────────────────────────────
+from toolbox_core import ToolboxSyncClient
+
+TOOLBOX_URL = os.getenv("TOOLBOX_URL", "http://127.0.0.1:5000")
+toolbox = ToolboxSyncClient(TOOLBOX_URL)
+
+def _close_toolbox() -> None:
+    with suppress(Exception):
+        close = getattr(toolbox, "close", None)
+        if callable(close):
+            close()
+        else:
+            client = getattr(toolbox, "_client", None)
+            if client and hasattr(client, "close"):
+                client.close()
+
+atexit.register(_close_toolbox)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tiny ADK tool wrapper (version-tolerant) + schema for hotel search
+# ──────────────────────────────────────────────────────────────────────────────
+def _mk_schema(props: Dict[str, Dict[str, Any]], req: List[str]) -> Dict[str, Any]:
+    return {"type": "object", "properties": props, "required": req, "additionalProperties": False}
+
+SCHEMA_hotels = _mk_schema(
+    {
+        "city_name": {"type": "string"},
+        "location_type": {"type": "string"},
+        "max_price": {"type": "number"},
+    },
+    ["city_name"],
+)
+
+def _make_json_tool(name: str, description: str, parameters: Dict[str, Any], executor: Callable[..., Any]):
+    try:
+        import google.adk.tools as tools
+    except Exception as e:
+        print(f"[ADK] google.adk.tools not importable; cannot register '{name}': {e}")
+        return None
+
+    candidates = [getattr(tools, n, None) for n in ("JsonSchemaFunctionTool","JsonFunctionTool","FunctionTool","ToolFn")]
+    candidates = [c for c in candidates if c]
+
+    def _try(Cls, *args, **kwargs):
+        try: return Cls(*args, **kwargs)
+        except Exception: return None
+
+    trials = [
+        lambda Cls: _try(Cls, fn=executor, parameters=parameters, description=description, name=name),
+        lambda Cls: _try(Cls, function=executor, parameters=parameters, description=description, name=name),
+        lambda Cls: _try(Cls, executor, parameters, description, name),
+        lambda Cls: _try(Cls, name, description, executor, parameters),
+        lambda Cls: _try(Cls, func=executor, parameters=parameters, description=description, name=name),
+        lambda Cls: _try(Cls, name=name, description=description, parameters=parameters, fn=executor),
+    ]
+    for Cls in candidates:
+        for build in trials:
+            t = build(Cls)
+            if t is not None:
+                print(f"[ADK] Tool registered: {name} via {Cls.__name__}")
+                return t
+    print(f"[ADK] FAILED to register tool: {name}")
+    return None
+
+# Executor: call your Toolbox tool exactly as in tools.yaml ("search-hotels")
+def exec_search_hotels(city_name: str, location_type: Optional[str] = None, max_price: Optional[float] = None) -> Any:
+    # Always hit the hyphenated tool name; that’s what your YAML defines.
+    return toolbox.run_tool(
+        "search-hotels",
+        {"city_name": city_name, "location_type": location_type, "max_price": max_price},
+    )
+
+# Register both underscore and hyphen names on the ADK side, so the LLM can call either.
+mcp_hotel_tools: List[Any] = [
+    _make_json_tool("search_hotels", "Search hotels in a city (MCP).", SCHEMA_hotels, exec_search_hotels),
+    _make_json_tool("search-hotels", "(alias) Search hotels in a city (MCP).", SCHEMA_hotels, exec_search_hotels),
+]
+mcp_hotel_tools = [t for t in mcp_hotel_tools if t]  # drop Nones if any
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Your original agents (unchanged logic)
+# ──────────────────────────────────────────────────────────────────────────────
 
 # Step 1: Trip Basics Collection Agent
 trip_basics_agent = LlmAgent(
@@ -96,7 +186,11 @@ Output selected activities with tags and rationales for each city.
     tools=[agent_tool.AgentTool(agent=google_search_agent)]
 )
 
-# Step 5: Hotel Shortlisting Agent
+# Step 5: Hotel Shortlisting Agent (ONLY place we add MCP tools)
+# Keep Google Search tool, and ADD the MCP tools so the model can call:
+#   - search_hotels  (ADK tool name)
+#   - search-hotels  (ADK alias)
+# The executor behind both hits your Toolbox tool "search-hotels" from tools.yaml.
 hotel_shortlisting_agent = LlmAgent(
     name="hotel_shortlisting_agent",
     model="gemini-2.5-pro",
@@ -107,7 +201,7 @@ Your responsibilities are:
 - Ask for location preferences (central/airport/beach)
 - Get room type requirements
 - Identify must-haves (crib, kitchenette, pool, family-friendly amenities)
-- Use Google Search to find hotels with current prices and availability
+- Use BOTH the attached MCP tools (search_hotels / search-hotels) and Google Search to find hotels
 - Present 3-5 hotels with rationale for each city
 - Provide booking links and detailed information
 - Consider family needs and toddler requirements
@@ -118,8 +212,8 @@ You will receive:
 
 Output hotel shortlist with prices, amenities, and booking information.
 """,
-    description="Searches and shortlists hotels using real-time data.",
-    tools=[agent_tool.AgentTool(agent=google_search_agent)]
+    description="Searches and shortlists hotels using MCP + web.",
+    tools=[agent_tool.AgentTool(agent=google_search_agent)] + mcp_hotel_tools,
 )
 
 # Step 6: Flight Shortlisting Agent
@@ -182,8 +276,7 @@ Output a complete itinerary with:
     tools=[agent_tool.AgentTool(agent=google_search_agent)]
 )
 
-
-# This is the main coordinator agent that will manage the sequential workflow.
+# Coordinator
 trip_planner_agent = LlmAgent(
     name="trip_planner_coordinator",
     model="gemini-2.5-pro",
