@@ -95,5 +95,3 @@ The repo currently exposes agent definitions but does not yet include a CLI or s
 
 ### 9) License and contributions
 Internal project. Contributions should be made via PRs on feature branches.
-
-
