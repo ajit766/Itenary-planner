@@ -1,0 +1,123 @@
+sources:
+  open-meteo:
+    kind: http
+    baseUrl: https://api.open-meteo.com
+
+  open-meteo-geocoding:
+    kind: http
+    baseUrl: https://geocoding-api.open-meteo.com
+
+  geodb-cities:
+    kind: http
+    baseUrl: https://wft-geo-db.p.rapidapi.com/v1/geo
+    headers:
+      X-RapidAPI-Key: ${?RAPIDAPI_KEY}
+      X-RapidAPI-Host: wft-geo-db.p.rapidapi.com
+
+  google-places:
+    kind: http
+    baseUrl: https://maps.googleapis.com/maps/api/place
+
+  wikipedia:
+    kind: http
+    baseUrl: https://en.wikipedia.org
+
+  getyourguide:
+    kind: http
+    baseUrl: https://getyourguide-marketplace.p.rapidapi.com
+    headers:
+      X-RapidAPI-Key: ${?RAPIDAPI_KEY}
+      X-RapidAPI-Host: getyourguide-marketplace.p.rapidapi.com
+
+  google-cse:
+    kind: http
+    baseUrl: https://customsearch.googleapis.com   # ← change
+
+tools:
+  sql_get_cities:
+    kind: http
+    source: geodb-cities
+    description: Get top populated cities for a given ISO2 country code (e.g., JP)
+    method: GET
+    path: "/cities?countryIds={{ .country }}&sort=-population&limit=10"
+
+  get-city-info:
+    kind: http
+    source: wikipedia
+    description: Get summary info about a city from Wikipedia
+    method: GET
+    path: "/api/rest_v1/page/summary/{{ .city_name }}"
+
+  get-activities:
+    kind: http
+    source: getyourguide
+    description: Get family/kid-friendly activities for a city
+    method: GET
+    path: "/activities?q={{ .city_name }}&categories=family-friendly&currency=USD&limit=25"
+
+  search-hotels:
+    kind: http
+    source: google-places
+    description: Search for hotels in a city using Google Places
+    method: GET
+    path: "/textsearch/json?key=${GOOGLE_MAPS_API_KEY}&query=hotels%20in%20{{ .city_name }}&type=lodging"
+
+
+  get-hotels-by-price-range:
+    kind: http
+    source: google-cse
+    description: Search hotels with price filter using Google CSE
+    method: GET
+    path: "/customsearch/v1?key=${GOOGLE_CSE_KEY}&cx=${GOOGLE_CSE_CX}&q=family%20hotels%20in%20{{ .city_name }}%20under%20{{ .max_price }}%20USD%20{{ .location_type }}"
+
+  search-hotels-by-name:
+    kind: http
+    source: google-places
+    description: Search for specific hotels by name
+    method: GET
+    path: "/textsearch/json?key=${GOOGLE_MAPS_API_KEY}&query={{ .hotel_name }}%20hotel&type=lodging"
+
+  search-hotels-by-location:
+    kind: http
+    source: google-places
+    description: Search for hotels in specific areas (central, beach, airport)
+    method: GET
+    path: "/textsearch/json?key=${GOOGLE_MAPS_API_KEY}&query=hotels%20{{ .location_type }}%20{{ .city_name }}&type=lodging"
+
+  search-flights:
+    kind: http
+    source: google-cse
+    description: Search flight options between cities (SERP results)
+    method: GET
+    path: "/customsearch/v1?key=${GOOGLE_CSE_KEY}&cx=${GOOGLE_CSE_CX}&q=flights%20from%20{{ .origin }}%20to%20{{ .destination }}%20on%20{{ .departure_date }}"
+
+  search-transit:
+    kind: http
+    source: google-cse
+    description: Find ways to travel between cities (train/bus/flight)
+    method: GET
+    path: "/customsearch/v1?key=${GOOGLE_CSE_KEY}&cx=${GOOGLE_CSE_CX}&q=how%20to%20travel%20from%20{{ .from }}%20to%20{{ .to }}"   # ← align names
+
+  get-weather-forecast:
+    kind: http
+    source: open-meteo
+    description: Get 7-day weather forecast for a location
+    method: GET
+    path: "/v1/forecast?latitude={{ .latitude }}&longitude={{ .longitude }}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode,windspeed_10m_max&timezone=auto&forecast_days=7"
+
+toolsets:
+  trip-planner-tools:
+    - sql_get_cities
+    - get-city-info
+    - get-activities
+    - search-hotels
+    - get-hotels-by-price-range
+    - search-hotels-by-name
+    - search-hotels-by-location
+    - search-flights
+    - search-transit
+    - get-weather-forecast
+
+  my_first_toolset:
+    - search-hotels-by-name
+    - search-hotels-by-location
