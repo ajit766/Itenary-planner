@@ -1,7 +1,11 @@
 from google.adk.agents import LlmAgent
 from google.adk.tools import agent_tool
+from toolbox_core import ToolboxSyncClient
 from .custom_agents import google_search_agent, booking_agent, notification_agent
 
+toolbox = ToolboxSyncClient("https://toolbox-727944579617.us-central1.run.app")
+
+tools = toolbox.load_toolset('trip-planner-tools')
 
 # Step 1: Trip Basics Collection Agent
 trip_basics_agent = LlmAgent(
@@ -79,7 +83,7 @@ After user confirms the city splits, update the itinerary with the new city plan
 Pass it on to the next step or the coordinator agent, after the updated itinerary is presented.
 """,
     description="Refines the city selection and itinerary split.",
-    tools=[agent_tool.AgentTool(agent=google_search_agent)],
+    tools=[*tools, agent_tool.AgentTool(agent=google_search_agent)],
 )
 
 activity_discovery_agent = LlmAgent(
@@ -107,7 +111,7 @@ After user confirms the hotels, Update the itinerary with the new hotel shortlis
 Pass it on to the next step or the coordinator agent, after the updated itinerary is presented.
 """,
     description="Refines the hotel shortlist for each city.",
-    tools=[agent_tool.AgentTool(agent=google_search_agent)],
+    tools=[agent_tool.AgentTool(agent=google_search_agent), *tools],
 )
 
 flight_shortlisting_agent = LlmAgent(
@@ -121,7 +125,7 @@ After user confirms the flights, Update the itinerary with the new flight shortl
 Pass it on to the next step or the coordinator agent, after the updated itinerary is presented.
 """,
     description="Refines the flight shortlist for the trip.",
-    tools=[agent_tool.AgentTool(agent=google_search_agent)],
+    tools=[agent_tool.AgentTool(agent=google_search_agent), *tools],
 )
 
 
